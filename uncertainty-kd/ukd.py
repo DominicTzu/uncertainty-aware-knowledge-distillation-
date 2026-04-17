@@ -292,7 +292,7 @@ def main():
     print("Loading student...")
     student_model = AutoModelForCausalLM.from_pretrained(
         STUDENT_NAME,
-        torch_dtype=torch.bfloat16,
+        torch_dtype=torch.float16,
         device_map="auto",
         trust_remote_code=True,
         low_cpu_mem_usage=True,
@@ -315,7 +315,7 @@ def main():
     print("Loading teacher...")
     teacher_model = AutoModelForCausalLM.from_pretrained(
         TEACHER_NAME,
-        torch_dtype=torch.bfloat16,
+        torch_dtype=torch.float16,
         device_map="auto",
         trust_remote_code=True,
         low_cpu_mem_usage=True,
@@ -327,7 +327,7 @@ def main():
 
     training_args = TrainingArguments(
         output_dir=OUT_DIR,
-        overwrite_output_dir=True,
+        #overwrite_output_dir=True,
 
         per_device_train_batch_size=TRAIN_BATCH_SIZE,
         per_device_eval_batch_size=EVAL_BATCH_SIZE,
@@ -345,7 +345,8 @@ def main():
         save_steps=SAVE_STEPS,
         save_total_limit=SAVE_TOTAL_LIMIT,
 
-        bf16=True,
+        bf16=False,
+        fp16=True,
         report_to="none",
 
         dataloader_num_workers=2,
@@ -365,7 +366,7 @@ def main():
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         data_collator=collator,
-        tokenizer=tokenizer,
+        #tokenizer=tokenizer,
     )
 
     print("Start uncertainty-aware KD training...")
