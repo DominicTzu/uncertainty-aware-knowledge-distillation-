@@ -8,6 +8,7 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel
+from tqdm.auto import tqdm
 
 # =========================
 # Config
@@ -26,7 +27,7 @@ TEACHER_MODEL = "Qwen/Qwen2.5-7B-Instruct"
 USE_TEACHER_FOR_BUCKETS = True
 
 # 评测目标模型
-MODEL_PATH = "/root/exp/qwen25_3b_kd_entropy_ultrachat/lora_final"
+MODEL_PATH = "/root/exp/qwen25_3b_vanilla_kd_ultrachat/lora_final"
 RUN_NAME = "kd_baseline"
 USE_PEFT = True
 
@@ -39,7 +40,7 @@ DETAIL_DIR = "/root/exp/kd_project_eval/details"
 os.makedirs(DETAIL_DIR, exist_ok=True)
 
 # 样本数
-MAX_EVAL_SAMPLES = None  # 正式可设 None
+MAX_EVAL_SAMPLES = 1000  # 正式可设 None
 
 # 生成参数
 MAX_NEW_TOKENS = 128
@@ -428,7 +429,9 @@ def main():
     student_conf_list = []
     teacher_ent_list = []
 
-    for i, ex in enumerate(data):
+    pbar = tqdm(data, total=len(data), desc=f"Evaluating {RUN_NAME}")
+
+    for i, ex in enumerate(pbar):
         prompt = ex["prompt"]
         target = ex["target"]
 
@@ -496,8 +499,28 @@ def main():
         if teacher_model is not None:
             teacher_ent_list.append(detail["teacher_mean_entropy"])
 
+        postfix = {
+            "nem": f"{mean(nem_list):.4f}",
+            "f1": f"{mean(f1_list):.4f}",
+            "nll": f"{mean(response_nll_list):.4f}",
+            "ppl": f"{mean(response_ppl_list):.4f}",
+        }
+        if teacher_model is not None and teacher_ent_list:
+            postfix["t_ent"] = f"{mean(teacher_ent_list):.4f}"
+
+        pbar.set_postfix(postfix)
+
         if (i + 1) % 20 == 0:
-            print(f"done {i + 1}/{len(data)}")
+            msg = (
+                f"[{i + 1}/{len(data)}] "
+                f"nem={mean(nem_list):.4f} "
+                f"f1={mean(f1_list):.4f} "
+                f"nll={mean(response_nll_list):.4f} "
+                f"ppl={mean(response_ppl_list):.4f}"
+            )
+            if teacher_model is not None and teacher_ent_list:
+                msg += f" teacher_entropy={mean(teacher_ent_list):.4f}"
+            print(msg)
 
     # overall summary
     summary = {

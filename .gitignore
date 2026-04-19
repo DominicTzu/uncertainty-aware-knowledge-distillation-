@@ -1,0 +1,110 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Build / packaging
+# =========================
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+wandb/
+mlruns/
+tensorboard/
+runs/
+events.out.tfevents.*
+
+# =========================
+# Training outputs / checkpoints
+# =========================
+checkpoints/
+ckpt/
+ckpts/
+output/
+outputs/
+exp/
+experiments/
+results/
+tmp/
+temp/
+
+# Hugging Face / model artifacts
+cache/
+.cahce/
+hf_cache/
+.huggingface/
+transformers_cache/
+datasets_cache/
+model_cache/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+
+# LoRA / adapters / merged models
+lora_final/
+merged_model/
+adapter_model.bin
+adapter_model.safetensors
+adapter_config.json
+
+# =========================
+# Data
+# =========================
+# data/   <-- keep tracked
+datasets/
+
+# Optional large data files outside data/
+*.parquet
+*.arrow
+
+# =========================
+# OS / editor
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+# Env / secrets
+# =========================
+.env
+.env.*
+*.env
+secrets.json
+credentials.json
+token.json
+hf_token.txt
+
+# =========================
+# Misc
+# =========================
+*.tmp
+*.bak

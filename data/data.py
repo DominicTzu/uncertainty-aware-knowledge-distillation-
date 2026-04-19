@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 
 from datasets import load_dataset
 from transformers import AutoTokenizer
+from tqdm.auto import tqdm
 
 # =========================
 # Config
@@ -25,7 +26,7 @@ TEST_SPLIT = "test_sft"
 # 用 student tokenizer 做长度过滤最合理，因为最终训练主要受 student 侧约束
 TOKENIZER_NAME = "Qwen/Qwen2.5-3B-Instruct"
 
-# 先抽子集，再做过滤；简历项目先 50k 很稳
+# 保持原数据量不变
 MAX_TRAIN_SAMPLES_BEFORE_FILTER = 100000
 MAX_EVAL_SAMPLES_BEFORE_FILTER = 10000
 
@@ -52,6 +53,7 @@ CONCISE_INSTRUCTION = (
 # Utils
 # =========================
 def write_jsonl(path: str, records: List[Dict]):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         for r in records:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
@@ -119,8 +121,8 @@ def build_prompt(user_text: str) -> str:
         )
     return prompt
 
-def count_tokens(tokenizer, text: str) -> int:
-    return len(tokenizer(text, add_special_tokens=False)["input_ids"])
+def tokenize_ids(tokenizer, text: str) -> List[int]:
+    return tokenizer(text, add_special_tokens=False)["input_ids"]
 
 def process_split(
     ds,
@@ -156,7 +158,9 @@ def process_split(
         "kept": 0,
     }
 
-    for i in idxs:
+    pbar = tqdm(idxs, desc=f"filtering {split_name}", total=len(idxs))
+
+    for i in pbar:
         ex = ds[i]
         stats["raw_seen"] += 1
 
@@ -171,9 +175,13 @@ def process_split(
         prompt = build_prompt(user_text)
         target = assistant_text
 
-        prompt_tokens = count_tokens(tokenizer, prompt)
-        target_tokens = count_tokens(tokenizer, target)
-        total_tokens = count_tokens(tokenizer, prompt + target)
+        # 只 tokenize 两次，不再单独 tokenize(prompt + target)
+        prompt_ids = tokenize_ids(tokenizer, prompt)
+        target_ids = tokenize_ids(tokenizer, target)
+
+        prompt_tokens = len(prompt_ids)
+        target_tokens = len(target_ids)
+        total_tokens = prompt_tokens + target_tokens
 
         if target_tokens < MIN_RESPONSE_TOKENS:
             stats["too_short_resp"] += 1
@@ -208,6 +216,13 @@ def process_split(
         }
         kept.append(rec)
         stats["kept"] += 1
+
+        if stats["raw_seen"] % 1000 == 0:
+            pbar.set_postfix({
+                "seen": stats["raw_seen"],
+                "kept": stats["kept"],
+                "keep_rate": f"{stats['kept'] / max(stats['raw_seen'], 1):.3f}",
+            })
 
         if keep_cap is not None and len(kept) >= keep_cap:
             break

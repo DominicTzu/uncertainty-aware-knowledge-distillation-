@@ -36,8 +36,8 @@ OUT_DIR = "/root/exp/qwen25_3b_vanilla_kd_ultrachat"
 
 MAX_LEN = 768
 
-DEBUG_TRAIN_N = 1000 # debug:1000, full:None
-DEBUG_EVAL_N = 200  # debug:200, full:None
+DEBUG_TRAIN_N = None # debug:1000, full:None
+DEBUG_EVAL_N = None  # debug:200, full:None
 
 # LoRA
 LORA_R = 16
@@ -57,12 +57,12 @@ EVAL_BATCH_SIZE = 1
 GRAD_ACCUM = 16
 NUM_EPOCHS = 1
 LOGGING_STEPS = 10
-EVAL_STEPS = 50 # debug: 50, full: 200
-SAVE_STEPS = 50 # debug: 50, full: 200
+EVAL_STEPS = 200 # debug: 50, full: 200
+SAVE_STEPS = 200 # debug: 50, full: 200
 SAVE_TOTAL_LIMIT = 2
 
 # KD
-KD_LAMBDA = 0.5
+KD_LAMBDA = 0.2
 KD_TEMPERATURE = 2.0
 
 # Optional: teacher 低显存加载
@@ -188,26 +188,32 @@ class VanillaKDTrainer(Trainer):
             )
             teacher_logits = teacher_outputs.logits  # [B, L, V]
 
-        # causal LM shift
         shift_student_logits = student_logits[:, :-1, :].contiguous()
         shift_teacher_logits = teacher_logits[:, :-1, :].contiguous()
         shift_labels = labels[:, 1:].contiguous()
-
-        # only target positions
-        active_mask = shift_labels.ne(-100)  # [B, L-1]
-
-        # CE
+        
+        # 只在公共 vocab 上做 KD，避免 teacher/student vocab size 不一致
+        common_vocab_size = min(
+            shift_student_logits.size(-1),
+            shift_teacher_logits.size(-1),
+        )
+        
+        student_kd_logits = shift_student_logits[..., :common_vocab_size]
+        teacher_kd_logits = shift_teacher_logits[..., :common_vocab_size]
+        
+        active_mask = shift_labels.ne(-100)
+        
+        # CE 仍然用 student 全 vocab，不能裁
         ce_loss = F.cross_entropy(
             shift_student_logits.view(-1, shift_student_logits.size(-1)),
             shift_labels.view(-1),
             ignore_index=-100,
         )
-
-        # KD on active positions only
+        
         T = self.kd_temperature
-
-        active_student = shift_student_logits[active_mask]   # [N, V]
-        active_teacher = shift_teacher_logits[active_mask]   # [N, V]
+        
+        active_student = student_kd_logits[active_mask]   # [N, V_common]
+        active_teacher = teacher_kd_logits[active_mask]   # [N, V_common]
 
         if active_student.numel() == 0:
             kd_loss = torch.tensor(0.0, device=ce_loss.device)
@@ -223,8 +229,9 @@ class VanillaKDTrainer(Trainer):
 
         loss = (1.0 - self.kd_lambda) * ce_loss + self.kd_lambda * kd_loss
 
+
         if self.state.global_step % max(1, self.args.logging_steps) == 0:
-            logger.info(
+            print(
                 f"step={self.state.global_step} "
                 f"loss={loss.item():.4f} "
                 f"ce={ce_loss.item():.4f} "
@@ -265,7 +272,7 @@ def main():
     print("Loading student...")
     student_model = AutoModelForCausalLM.from_pretrained(
         STUDENT_NAME,
-        torch_dtype=torch.float16,
+        torch_dtype=torch.bfloat16,
         device_map="auto",
         trust_remote_code=True,
         low_cpu_mem_usage=True,
@@ -289,7 +296,7 @@ def main():
     # 先给最稳的非4bit版本；显存不够再换4bit
     teacher_model = AutoModelForCausalLM.from_pretrained(
         TEACHER_NAME,
-        torch_dtype=torch.float16,
+        torch_dtype=torch.bfloat16,
         device_map="auto",
         trust_remote_code=True,
         low_cpu_mem_usage=True,
@@ -319,8 +326,8 @@ def main():
         save_steps=SAVE_STEPS,
         save_total_limit=SAVE_TOTAL_LIMIT,
 
-        bf16=False,
-        fp16=True,
+        bf16=True,
+        #fp16=True,
         report_to="none",
 
         dataloader_num_workers=2,

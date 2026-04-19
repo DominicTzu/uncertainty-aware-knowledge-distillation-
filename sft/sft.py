@@ -35,8 +35,8 @@ OUT_DIR = "/root/exp/qwen25_3b_sft_ultrachat"
 MAX_LEN = 768
 
 # 调试时可改小；正式跑设为 None
-DEBUG_TRAIN_N = 1000 # debug:1000, full:None
-DEBUG_EVAL_N = 200  # debug:200, full:None
+DEBUG_TRAIN_N = None # debug:1000, full:None
+DEBUG_EVAL_N = None  # debug:200, full:None
 
 # LoRA
 LORA_R = 16
@@ -205,7 +205,7 @@ def main():
     print("Loading model...")
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_NAME,
-        torch_dtype=torch.float16,
+        torch_dtype=torch.bfloat16,
         device_map="auto",
         trust_remote_code=True,
         low_cpu_mem_usage=True,
@@ -246,8 +246,8 @@ def main():
         save_steps=SAVE_STEPS,
         save_total_limit=SAVE_TOTAL_LIMIT,
 
-        bf16=False,
-        fp16=True,
+        bf16=True,
+        #fp16=True,
         report_to="none",
 
         dataloader_num_workers=2,
